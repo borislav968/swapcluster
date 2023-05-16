@@ -2,10 +2,14 @@
 #define F_CPU 16000000UL    // Тактовая частота 16МГц
 
 #include <avr/io.h>
+#include <avr/interrupt.h>
+#include <stdio.h>          // для sprintf()
 
 #define UART_BAUD_RATE 57600UL  // Скорость передачи UART 57600 бит/с
 #define SET_UBRR ((F_CPU/(16UL*UART_BAUD_RATE))-1UL) // Значения регистров для настройки скорости UART
 
+uint16_t period = 0;    // измеренный период сигнала в 1/62500с
+uint8_t time = 0;       // используется в главном цикле
 
 // Настроить UART
 void init_uart () {
@@ -29,11 +33,53 @@ void uart_puts (char *s) {
     }
 }
 
+// Настроить таймер 1 (измерение частоты)
+void init_meter () {
+    TCCR1B |= (1<<ICES1);   // захват положительного фронта сигнала
+    TIMSK1 |= (1<<ICIE1);   // включить прерывание по захвату
+    TCCR1B |= (1<<CS12);    // делитель 256, частота 62500Гц
+}
+
+// Настроить таймер 3 (главный цикл)
+void init_timer_main () {
+    TCCR4B |= (1<<WGM42);   // режим сравнения
+    OCR4A = 6250;           // отсчёт до 6250, 1/10с
+    TIMSK4 |= (1<<OCIE4A);  // включить прерывание по сравнению
+    TCCR4B |= (1<<CS42);    // делитель 256, частота 62500Гц
+}
+
+// Прерывание по захвату сигнала таймером 1
+ISR (TIMER1_CAPT_vect) {
+    TCNT1 = 0;      // обнулить счётный регистр
+    period = ICR1;  // результат измерения берётся из регистра захвата
+}
+
+// Прерываение по сравнению таймера 4
+ISR (TIMER4_COMPA_vect) {
+    time++;
+}
+
 int main () {
+
+    uint16_t frequency = 0; // частота входного сигнала
+    char buffer [30];       // буфер для вывода строк
     
-    init_uart();    // настроить UART
+    init_uart();        // настроить UART
+    init_meter();       // настроить таймер 1 (измерение частоты)
+    init_timer_main();  // настроить таймер 4 (главный цикл)
     
     uart_puts("\x1b[2J\x1b[?25l\n\n");
     uart_puts("Преобразователь частоты тахометра\n\r");
+    
+    sei();  // разрешить все прерывания
+    
+    while (1) {
+        if (time) {
+            frequency = 62500 / period;
+            sprintf(buffer, "Частота %uГц  \r", frequency);
+            time = 0;
+        }
+        asm(" ");
+    }
     
 }
