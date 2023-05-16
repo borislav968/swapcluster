@@ -77,6 +77,7 @@ int main () {
         if (time) {
             frequency = 62500 / period;
             sprintf(buffer, "Частота %uГц  \r", frequency);
+            uart_puts(buffer);
             time = 0;
         }
         asm(" ");
