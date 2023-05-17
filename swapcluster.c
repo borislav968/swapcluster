@@ -93,6 +93,7 @@ int main () {
 
     uint16_t frequency = 0; // частота входного сигнала
     uint16_t freq_out = 0;  // частота на выходе
+    uint16_t rpm = 0;       // обороты двигателя
     char buffer [30];       // буфер для вывода строк
     
     init_uart();        // настроить UART
@@ -101,7 +102,8 @@ int main () {
     init_timer_main();  // настроить таймер 4 (главный цикл)
     
     uart_puts("\x1b[2J\x1b[?25l\n\n");
-    uart_puts("Преобразователь частоты тахометра\n\r");
+    uart_puts("Преобразователь частоты тахометра\n\n\r");
+    uart_puts("вход\tвыход\tоб/мин\n\r");
     
     sei();  // разрешить все прерывания
     
@@ -109,8 +111,9 @@ int main () {
         if (time) {
             frequency = 62500 / period;
             freq_out = (frequency / IMP_IN) * IMP_OUT;
+            rpm = (frequency * 60) / IMP_IN;
             set_freq(freq_out);
-            sprintf(buffer, "вх: %uГц вых: %uГц  \r", frequency, freq_out);
+            sprintf(buffer, "%u   \t%u   \t%u    \r", frequency, freq_out, rpm);
             uart_puts(buffer);
             time = 0;
         }
