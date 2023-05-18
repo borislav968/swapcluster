@@ -11,8 +11,6 @@
 #define UART_BAUD_RATE 57600UL  // Скорость передачи UART 57600 бит/с
 #define SET_UBRR ((F_CPU/(16UL*UART_BAUD_RATE))-1UL) // Значения регистров для настройки скорости UART
 
-#define IMP_IN 3    // Количество импульсов на 1 оборот на выходе
-#define IMP_OUT 2   // Требуемое для тахометра количество импульсов на 1 оборот
 
 // Хранятся в EEPROM:
 uint8_t EEMEM imp_in_E;         // число входных импульсов
@@ -175,8 +173,8 @@ int main () {
         if (time) {                                         // если прошло 100мс с прошлого выполнения
             wdt_reset();                                    // сбросить Watchdog
             frequency = 62500 / period;                     // вычислить частоту входного сигнала
-            freq_out = (frequency / IMP_IN) * IMP_OUT;      // ...выходного сигнала
-            rpm = (frequency * 60) / IMP_IN;                // ...обороты двигателя
+            freq_out = (frequency / imp_in) * imp_out;      // ...выходного сигнала
+            rpm = (frequency * 60) / imp_in;                // ...обороты двигателя
             set_freq(freq_out);                             // задать новую частоту генератору
             sprintf(buffer, "%u   \t%u   \t%u    \r", frequency, freq_out, rpm);    // вывести данные в терминал
             uart_puts(buffer);
