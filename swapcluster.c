@@ -14,13 +14,16 @@
 
 uint16_t period = UINT16_MAX;   // измеренный период сигнала в 1/62500с
 uint8_t time = 0;               // используется в главном цикле
+uint8_t setup_mode = 0;
 
 // Настроить UART
 void init_uart () {
-    UBRR0H = (uint8_t)(SET_UBRR>>8);    // настройка скорости
+    UBRR0H = (uint8_t)(SET_UBRR>>8);        // настройка скорости
     UBRR0L = (uint8_t)SET_UBRR;
-    UCSR0B = (1<<TXEN0);                // разрешение передачи
-    UCSR0C = (1<<UCSZ00) | (1<<UCSZ01);  // 8 бит
+    UCSR0B |= (1<<TXEN0);                   // разрешение передачи
+    UCSR0B |= (1<<RXEN0);                   // разрешение приёма
+    UCSR0B |= (1<<RXCIE0);                  // включение прерывания по приёму
+    UCSR0C |= (1<<UCSZ00) | (1<<UCSZ01);    // 8 бит
 }
 
 // Отправить символ в UART
@@ -40,9 +43,15 @@ void uart_puts (char *s) {
 // Отправить строку из памяти программ в UART
 void uart_puts_P (const char *progmem_s) {
     register char c;
-    while ((c = pgm_read_byte(progmem_s++))) {        // пока строка не закончилась
-        uart_putc(c);  // отправить очередной символ
+    while ((c = pgm_read_byte(progmem_s++))) {      // пока строка не закончилась
+        uart_putc(c);                               // отправить очередной символ
     }
+}
+
+// принять символ из UART
+char uart_getc () {
+    while (!(UCSR0A & (1<<RXC0)));
+    return UDR0;
 }
 
 // Настроить таймер 1 (измерение частоты)
