@@ -3,9 +3,9 @@
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
-#include <avr/pgmspace.h>
-#include <avr/eeprom.h>
-#include <avr/wdt.h>
+#include <avr/pgmspace.h>   // для вывода строк напрямую из flash-памяти
+#include <avr/eeprom.h>     // для хранения настроек
+#include <avr/wdt.h>        // сторожевой таймер
 #include <stdio.h>          // для sprintf()
 
 #define UART_BAUD_RATE 57600UL  // Скорость передачи UART 57600 бит/с
@@ -14,17 +14,19 @@
 #define IMP_IN 3    // Количество импульсов на 1 оборот на выходе
 #define IMP_OUT 2   // Требуемое для тахометра количество импульсов на 1 оборот
 
-uint8_t EEMEM imp_in_E;
-uint8_t EEMEM imp_out_E;
+// Хранятся в EEPROM:
+uint8_t EEMEM imp_in_E;         // число входных импульсов
+uint8_t EEMEM imp_out_E;        // число выходных импульсов
 
-uint8_t imp_in = 1;
-uint8_t imp_out = 1;
+// Используются при работе программы
+uint8_t imp_in = 1;             // число входных импульсов
+uint8_t imp_out = 1;            // число выходных импульсов
 
 uint16_t period = UINT16_MAX;   // измеренный период сигнала в 1/62500с
 uint8_t time = 0;               // используется в главном цикле
-uint8_t setup_mode = 0;
-char buffer [50];               // буфер для вывода строк
-char rxbuf = 0;
+uint8_t setup_mode = 0;         // флаг режима настройки
+char buffer [50];               // буфер для вывода строк в UART
+char rxbuf = 0;                 // буфер приёма из UART
 
 // Настроить UART
 void init_uart () {
@@ -60,8 +62,8 @@ void uart_puts_P (const char *progmem_s) {
 
 // принять символ из UART
 char uart_getc () {
-    while (!(UCSR0A & (1<<RXC0)));
-    return UDR0;
+    while (!(UCSR0A & (1<<RXC0)));  // ожидание приёма
+    return UDR0;                    // вернуть принятый байт
 }
 
 // Настроить таймер 1 (измерение частоты)
@@ -101,6 +103,7 @@ void set_freq (uint16_t freq) {
     }
 }
 
+// Прочитать настройки из EEPROM
 void read_settings () {
     imp_in = eeprom_read_byte(&imp_in_E);
     if ((imp_in < 1) || (imp_in > 8)) imp_in = 1;
@@ -129,11 +132,18 @@ ISR (USART0_RX_vect) {
     if (UDR0 == 's') setup_mode++;
 }
 
+// Используется для настройки
 void setup_pulses (uint8_t offset, uint8_t * setting) {
-    sprintf(buffer, "\x1b[2A\x1b[%uC\x1b[?25h", offset);
+    register uint8_t correct = 0;
+    sprintf(buffer, "\x1b[3A\x1b[%uC\x1b[?25h\x1b[?12h", offset);    // переместить курсор в нужное место
     uart_puts(buffer);
-    rxbuf = uart_getc();
-    if ((rxbuf >= 0x31) && (rxbuf <= 0x39)) *setting = rxbuf - 0x30;
+    while (!correct) {                                  // повторять ожидание ввода, пока не будет введено допустимое значение
+        rxbuf = uart_getc();                            // ожидание ввода
+        if ((rxbuf >= 0x31) && (rxbuf <= 0x38)) {       // если введена цифра от 1 до 8
+            *setting = rxbuf - 0x30;                    // присвоить переменной её значение
+            correct++;                                  // завершить цикл
+        }
+    }
 }
 
 int main () {
@@ -180,7 +190,8 @@ int main () {
             while (1) {
                 sprintf(buffer, "Вход: %u имп/об, выход %u имп/об\n\n\r", imp_in, imp_out);
                 uart_puts(buffer);
-                uart_puts_P(PSTR("Изменить число импульсов: на входе \"i\", на выходе - \"o\"\r"));
+                uart_puts_P(PSTR("Изменить число импульсов: на входе \"i\", на выходе - \"o\"\n\r"));
+                uart_puts_P(PSTR("Допустимые значения: от 1 до 8\r"));
                 rxbuf = uart_getc();
                 if (rxbuf == 'q') {
                     eeprom_write_byte(&imp_in_E, imp_in);
