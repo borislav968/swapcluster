@@ -185,7 +185,7 @@ int main () {
             set_freq(0);                                    // сигнал на выходе выключается
             cli();                                          // запрет всех прерываний
             uart_puts_P(PSTR("\x1b[2J\x1b[?25l\n\n"));
-            uart_puts_P(PSTR("Настройка\x1b\r[5BСохранить и выйти: \"q\"\x1b[3A\r"));
+            uart_puts_P(PSTR("Настройка\x1b\r[6BСохранить и выйти: \"q\"\x1b[4A\r"));
             while (1) {
                 sprintf(buffer, "Вход: %u имп/об, выход %u имп/об\n\n\r", imp_in, imp_out);
                 uart_puts(buffer);
@@ -201,7 +201,7 @@ int main () {
                     setup_pulses(6, &imp_in);               // ждать ввода значения числа входных импульсов
                 } else if (rxbuf == 'o') {                  // если нажата o
                     setup_pulses(22, &imp_out);             // ждать ввода значения числа выходных импульсов
-                }                
+                } else uart_puts_P(PSTR("\x1b[3A"));
             }
         }
         asm(" ");       // магия, без которой бесконечный цикл не работает
