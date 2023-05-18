@@ -4,6 +4,8 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <avr/pgmspace.h>
+#include <avr/eeprom.h>
+#include <avr/wdt.h>
 #include <stdio.h>          // для sprintf()
 
 #define UART_BAUD_RATE 57600UL  // Скорость передачи UART 57600 бит/с
@@ -12,9 +14,17 @@
 #define IMP_IN 3    // Количество импульсов на 1 оборот на выходе
 #define IMP_OUT 2   // Требуемое для тахометра количество импульсов на 1 оборот
 
+uint8_t EEMEM imp_in_E;
+uint8_t EEMEM imp_out_E;
+
+uint8_t imp_in = 1;
+uint8_t imp_out = 1;
+
 uint16_t period = UINT16_MAX;   // измеренный период сигнала в 1/62500с
 uint8_t time = 0;               // используется в главном цикле
 uint8_t setup_mode = 0;
+char buffer [50];               // буфер для вывода строк
+char rxbuf = 0;
 
 // Настроить UART
 void init_uart () {
@@ -91,6 +101,14 @@ void set_freq (uint16_t freq) {
     }
 }
 
+void read_settings () {
+    imp_in = eeprom_read_byte(&imp_in_E);
+    if ((imp_in < 1) || (imp_in > 8)) imp_in = 1;
+    imp_out = eeprom_read_byte(&imp_out_E);
+    if ((imp_out < 1) || (imp_out > 8)) imp_out = 1;
+    
+}
+
 // Прерывание по захвату сигнала таймером 1
 ISR (TIMER1_CAPT_vect) {
     TCNT1 = 0;      // обнулить счётный регистр
@@ -107,26 +125,44 @@ ISR (TIMER4_COMPA_vect) {
     time++;
 }
 
+ISR (USART0_RX_vect) {
+    if (UDR0 == 's') setup_mode++;
+}
+
+void setup_pulses (uint8_t offset, uint8_t * setting) {
+    sprintf(buffer, "\x1b[2A\x1b[%uC\x1b[?25h", offset);
+    uart_puts(buffer);
+    rxbuf = uart_getc();
+    if ((rxbuf >= 0x31) && (rxbuf <= 0x39)) *setting = rxbuf - 0x30;
+}
+
 int main () {
+    
+    MCUSR = 0;
+    wdt_disable();
 
     uint16_t frequency = 0; // частота входного сигнала
     uint16_t freq_out = 0;  // частота на выходе
     uint16_t rpm = 0;       // обороты двигателя
-    char buffer [30];       // буфер для вывода строк
     
     init_uart();        // настроить UART
     init_meter();       // настроить таймер 1 (измерение частоты)
     init_gen();         // настроить таймер 3 (генератор сигнала)
     init_timer_main();  // настроить таймер 4 (главный цикл)
+    read_settings();
     
     uart_puts_P(PSTR("\x1b[2J\x1b[?25l\n\n"));
     uart_puts_P(PSTR("Преобразователь частоты тахометра\n\n\r"));
-    uart_puts_P(PSTR("вход\tвыход\tоб/мин\n\r"));
+    uart_puts_P(PSTR("вход\tвыход\tоб/мин\n\n\n\r"));
+    uart_puts_P(PSTR("Для настройки нажмите \"s\"\r\x1b[2A"));
+    
+    wdt_enable(WDTO_250MS);
     
     sei();  // разрешить все прерывания
-    
+   
     while (1) {
         if (time) {
+            wdt_reset();
             frequency = 62500 / period;
             freq_out = (frequency / IMP_IN) * IMP_OUT;
             rpm = (frequency * 60) / IMP_IN;
@@ -134,6 +170,30 @@ int main () {
             sprintf(buffer, "%u   \t%u   \t%u    \r", frequency, freq_out, rpm);
             uart_puts(buffer);
             time = 0;
+        }
+        if (setup_mode) {
+            wdt_disable();
+            set_freq(0);
+            cli();
+            uart_puts_P(PSTR("\x1b[2J\x1b[?25l\n\n"));
+            uart_puts_P(PSTR("Настройка\x1b\r[5BСохранить и выйти: \"q\"\x1b[3A\r"));
+            while (1) {
+                sprintf(buffer, "Вход: %u имп/об, выход %u имп/об\n\n\r", imp_in, imp_out);
+                uart_puts(buffer);
+                uart_puts_P(PSTR("Изменить число импульсов: на входе \"i\", на выходе - \"o\"\r"));
+                rxbuf = uart_getc();
+                if (rxbuf == 'q') {
+                    eeprom_write_byte(&imp_in_E, imp_in);
+                    eeprom_write_byte(&imp_out_E, imp_out);
+                    wdt_enable(WDTO_500MS);
+                    while (1) asm(" ");
+                } else if (rxbuf == 'i') {
+                    setup_pulses(6, &imp_in);
+                } else if (rxbuf == 'o') {
+                    setup_pulses(22, &imp_out);                    
+                }
+                uart_puts_P(PSTR("\x1b[?25l\r"));
+            }
         }
         asm(" ");
     }
