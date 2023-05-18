@@ -135,7 +135,7 @@ ISR (USART0_RX_vect) {
 // Используется для настройки
 void setup_pulses (uint8_t offset, uint8_t * setting) {
     register uint8_t correct = 0;
-    sprintf(buffer, "\x1b[3A\x1b[%uC\x1b[?25h\x1b[?12h", offset);    // переместить курсор в нужное место
+    sprintf(buffer, "\x1b[3A\x1b[%uC\x1b[?25h", offset);// переместить курсор в нужное место и показать его
     uart_puts(buffer);
     while (!correct) {                                  // повторять ожидание ввода, пока не будет введено допустимое значение
         rxbuf = uart_getc();                            // ожидание ввода
@@ -144,6 +144,7 @@ void setup_pulses (uint8_t offset, uint8_t * setting) {
             correct++;                                  // завершить цикл
         }
     }
+    uart_puts_P(PSTR("\x1b[?25l\r"));                   // спрятать курсор
 }
 
 int main () {
@@ -171,20 +172,20 @@ int main () {
     sei();  // разрешить все прерывания
    
     while (1) {
-        if (time) {
-            wdt_reset();
-            frequency = 62500 / period;
-            freq_out = (frequency / IMP_IN) * IMP_OUT;
-            rpm = (frequency * 60) / IMP_IN;
-            set_freq(freq_out);
-            sprintf(buffer, "%u   \t%u   \t%u    \r", frequency, freq_out, rpm);
+        if (time) {                                         // если прошло 100мс с прошлого выполнения
+            wdt_reset();                                    // сбросить Watchdog
+            frequency = 62500 / period;                     // вычислить частоту входного сигнала
+            freq_out = (frequency / IMP_IN) * IMP_OUT;      // ...выходного сигнала
+            rpm = (frequency * 60) / IMP_IN;                // ...обороты двигателя
+            set_freq(freq_out);                             // задать новую частоту генератору
+            sprintf(buffer, "%u   \t%u   \t%u    \r", frequency, freq_out, rpm);    // вывести данные в терминал
             uart_puts(buffer);
-            time = 0;
+            time = 0;                                       // обнуляется для правильной работы таймера
         }
-        if (setup_mode) {
-            wdt_disable();
-            set_freq(0);
-            cli();
+        if (setup_mode) {                                   // режим настройки
+            wdt_disable();                                  // Watchdog выключается
+            set_freq(0);                                    // сигнал на выходе выключается
+            cli();                                          // запрет всех прерываний
             uart_puts_P(PSTR("\x1b[2J\x1b[?25l\n\n"));
             uart_puts_P(PSTR("Настройка\x1b\r[5BСохранить и выйти: \"q\"\x1b[3A\r"));
             while (1) {
@@ -193,20 +194,19 @@ int main () {
                 uart_puts_P(PSTR("Изменить число импульсов: на входе \"i\", на выходе - \"o\"\n\r"));
                 uart_puts_P(PSTR("Допустимые значения: от 1 до 8\r"));
                 rxbuf = uart_getc();
-                if (rxbuf == 'q') {
-                    eeprom_write_byte(&imp_in_E, imp_in);
+                if (rxbuf == 'q') {                         // если нажата q
+                    eeprom_write_byte(&imp_in_E, imp_in);   // сохранить настройки в EEPROM
                     eeprom_write_byte(&imp_out_E, imp_out);
-                    wdt_enable(WDTO_500MS);
-                    while (1) asm(" ");
-                } else if (rxbuf == 'i') {
-                    setup_pulses(6, &imp_in);
-                } else if (rxbuf == 'o') {
-                    setup_pulses(22, &imp_out);                    
-                }
-                uart_puts_P(PSTR("\x1b[?25l\r"));
+                    wdt_enable(WDTO_500MS);                 // запустить Watchdog для перезагрузки
+                    while (1) asm(" ");                     // ...и ждать его срабатывания
+                } else if (rxbuf == 'i') {                  // если нажата i
+                    setup_pulses(6, &imp_in);               // ждать ввода значения числа входных импульсов
+                } else if (rxbuf == 'o') {                  // если нажата o
+                    setup_pulses(22, &imp_out);             // ждать ввода значения числа выходных импульсов
+                }                
             }
         }
-        asm(" ");
+        asm(" ");       // магия, без которой бесконечный цикл не работает
     }
     
 }
