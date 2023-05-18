@@ -3,6 +3,7 @@
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
+#include <avr/pgmspace.h>
 #include <stdio.h>          // для sprintf()
 
 #define UART_BAUD_RATE 57600UL  // Скорость передачи UART 57600 бит/с
@@ -33,6 +34,14 @@ void uart_puts (char *s) {
     while (*s) {        // пока строка не закончилась
         uart_putc(*s);  // отправить очередной символ
         s++;            // передвинуть указатель на следующий символ
+    }
+}
+
+// Отправить строку из памяти программ в UART
+void uart_puts_P (const char *progmem_s) {
+    register char c;
+    while ((c = pgm_read_byte(progmem_s++))) {        // пока строка не закончилась
+        uart_putc(c);  // отправить очередной символ
     }
 }
 
@@ -101,9 +110,9 @@ int main () {
     init_gen();         // настроить таймер 3 (генератор сигнала)
     init_timer_main();  // настроить таймер 4 (главный цикл)
     
-    uart_puts("\x1b[2J\x1b[?25l\n\n");
-    uart_puts("Преобразователь частоты тахометра\n\n\r");
-    uart_puts("вход\tвыход\tоб/мин\n\r");
+    uart_puts_P(PSTR("\x1b[2J\x1b[?25l\n\n"));
+    uart_puts_P(PSTR("Преобразователь частоты тахометра\n\n\r"));
+    uart_puts_P(PSTR("вход\tвыход\tоб/мин\n\r"));
     
     sei();  // разрешить все прерывания
     
