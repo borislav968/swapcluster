@@ -26,3 +26,9 @@
 ### Техническая информация
 
 Первый вариант устройства основан на плате Arduino Nano с микроконтроллером ATMega328PB. Программа предназначена именно для этого типа контроллера, и с ATMega328P работать не будет.
+
+### Контакты
+
+E-mail: elgato@yavtanke.ru
+YouTube: https://youtube.com/@flugegeheimen968
+Telegram: https://t.me/ironcars5g
