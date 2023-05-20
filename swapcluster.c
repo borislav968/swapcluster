@@ -151,6 +151,8 @@ int main () {
     wdt_disable();
 
     uint16_t frequency = 0; // частота входного сигнала
+    uint16_t filtered_frequency = 0;  // усредненная отфильтрованная частота входного сигнала
+	float avg = 0.01; 		// коэффициент усреднения, определяющий скорость достижения усредняемого значения (<1; чем меньше значение, тем лучше усреднение)
     uint16_t freq_out = 0;  // частота на выходе
     uint16_t rpm = 0;       // обороты двигателя
     
@@ -173,10 +175,12 @@ int main () {
         if (time) {                                         // если прошло 100мс с прошлого выполнения
             wdt_reset();                                    // сбросить Watchdog
             frequency = 62500 / period;                     // вычислить частоту входного сигнала
-            freq_out = (frequency / imp_in) * imp_out;      // ...выходного сигнала
-            rpm = (frequency * 60) / imp_in;                // ...обороты двигателя
+			if (abs (frequency - filtered_frequency) < 50) 	// грубая фильтрация от больших скачков
+			filtered_frequency = avg * frequency + (1 - avg) * filtered_frequency; // усреднить и вычислить плавающую частоту входного сигнала
+            freq_out = (filtered_frequency / imp_in) * imp_out;      // ...выходного сигнала
+            rpm = (filtered_frequency * 60) / imp_in;                // ...обороты двигателя
             set_freq(freq_out);                             // задать новую частоту генератору
-            sprintf(buffer, "%u   \t%u   \t%u    \r", frequency, freq_out, rpm);    // вывести данные в терминал
+            sprintf(buffer, "%u   \t%u   \t%u    \r", filtered_frequency, freq_out, rpm);    // вывести данные в терминал
             uart_puts(buffer);
             time = 0;                                       // обнуляется для правильной работы таймера
         }
